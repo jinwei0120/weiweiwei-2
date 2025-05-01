@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <title>貪食蛇：玩家 vs AI</title>
+    <style>
+        body { background: #222; margin: 0; }
+        #container { width: 100vw; height: 100vh; overflow: hidden; }
+        #ui-panel { position: absolute; left: 30px; top: 30px; z-index: 10; }
+        #gameCanvas { display: block; margin: 0 auto; background: #111; border: 2px solid #444; }
+        #start-btn { font-size: 18px; margin-top: 10px; padding: 8px 24px; border-radius: 6px; border: none; background: #43a047; color: #fff; cursor: pointer; }
+        #messages { color: #fff; margin-top: 10px; }
+    </style>
+</head>
+<body>
+<div id="container">
+    <div id="ui-panel">
+        <button id="start-btn">開始遊戲</button>
+        <div id="messages"></div>
+    </div>
+    <canvas id="gameCanvas" width="600" height="600"></canvas>
+</div>
+<script>
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+const startBtn = document.getElementById('start-btn');
+const messagesContainer = document.getElementById('messages');
+
+const GRID_SIZE = 20;
+const CELL_SIZE = 28;
+const WIDTH = Math.floor(canvas.width / CELL_SIZE);
+const HEIGHT = Math.floor(canvas.height / CELL_SIZE);
+
+let player, ai, food, gameOver, intervalId, score, aiScore, direction, aiDirection;
+
+function resetGame() {
+    player = [{x: 5, y: 5}];
+    ai = [{x: WIDTH - 6, y: HEIGHT - 6}];
+    direction = 'right';
+    aiDirection = 'left';
+    score = 0;
+    aiScore = 0;
+    food = spawnFood();
+    gameOver = false;
+}
+
+function spawnFood() {
+    while (true) {
+        let fx = Math.floor(Math.random() * WIDTH);
+        let fy = Math.floor(Math.random() * HEIGHT);
+        if (!isOccupied(fx, fy)) return {x: fx, y: fy};
+    }
+}
+
+function isOccupied(x, y) {
+    return player.some(s => s.x === x && s.y === y) ||
+           ai.some(s => s.x === x && s.y === y);
+}
+
+function drawCell(x, y, color) {
+    ctx.fillStyle = color;
+    ctx.fillRect(x * CELL_SIZE, y * CELL_SIZE, CELL_SIZE - 2, CELL_SIZE - 2);
+}
+
+function draw() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    // 畫食物
+    drawCell(food.x, food.y, "#ffeb3b");
+    // 畫AI
+    ai.forEach((s, i) => drawCell(s.x, s.y, i === 0 ? "#e53935" : "#ffcdd2"));
+    // 畫玩家
+    player.forEach((s, i) => drawCell(s.x, s.y, i === 0 ? "#1976d2" : "#90caf9"));
+    // 分數
+    ctx.fillStyle = "#fff";
+    ctx.font = "18px Arial";
+    ctx.fillText(`玩家分數: ${score}`, 20, 24);
+    ctx.fillStyle = "#ffb300";
+    ctx.fillText(`AI分數: ${aiScore}`, 470, 24);
+}
+
+function moveSnake(snake, dir) {
+    const head = {...snake[0]};
+    if (dir === 'up') head.y--;
+    if (dir === 'down') head.y++;
+    if (dir === 'left') head.x--;
+    if (dir === 'right') head.x++;
+    snake.unshift(head);
+    return head;
+}
+
+function checkCollision(snake) {
+    const head = snake[0];
+    // 撞牆
+    if (head.x < 0 || head.x >= WIDTH || head.y < 0 || head.y >= HEIGHT) return true;
+    // 撞自己
+    for (let i = 1; i < snake.length; i++) {
+        if (snake[i].x === head.x && snake[i].y === head.y) return true;
+    }
+    return false;
+}
+
+function aiChooseDirection() {
+    const head = ai[0];
+    const dirs = ['up', 'down', 'left', 'right'];
+    // 優先朝食物移動
+    let best = aiDirection;
+    let minDist = Infinity;
+    for (let dir of dirs) {
+        let nx = head.x, ny = head.y;
+        if (dir === 'up') ny--;
+        if (dir === 'down') ny++;
+        if (dir === 'left') nx--;
+        if (dir === 'right') nx++;
+        // 避免撞牆或撞自己或撞玩家
+        if (nx < 0 || nx >= WIDTH || ny < 0 || ny >= HEIGHT) continue;
+        if (ai.some((s, i) => i > 0 && s.x === nx && s.y === ny)) continue;
+        if (player.some(s => s.x === nx && s.y === ny)) continue;
+        let dist = Math.abs(nx - food.x) + Math.abs(ny - food.y);
+        if (dist < minDist) {
+            minDist = dist;
+            best = dir;
+        }
+    }
+    return best;
+}
+
+function gameLoop() {
+    // 玩家移動
+    const head = moveSnake(player, direction);
+    // AI移動
+    aiDirection = aiChooseDirection();
+    const aiHead = moveSnake(ai, aiDirection);
+
+    // 玩家吃到食物
+    if (head.x === food.x && head.y === food.y) {
+        score++;
+        food = spawnFood();
+    } else {
+        player.pop();
+    }
+    // AI吃到食物
+    if (aiHead.x === food.x && aiHead.y === food.y) {
+        aiScore++;
+        food = spawnFood();
+    } else {
+        ai.pop();
+    }
+
+    // 玩家撞到自己或牆或AI
+    if (checkCollision(player) || ai.some(s => s.x === head.x && s.y === head.y)) {
+        gameOver = true;
+        showResult("AI 勝利！");
+        return;
+    }
+    // AI撞到自己或牆或玩家
+    if (checkCollision(ai) || player.some(s => s.x === aiHead.x && s.y === aiHead.y)) {
+        gameOver = true;
+        showResult("玩家勝利！");
+        return;
+    }
+
+    draw();
+}
+
+function showResult(msg) {
+    clearInterval(intervalId);
+    messagesContainer.innerHTML = `遊戲結束！${msg}<br>玩家分數：${score}，AI分數：${aiScore}`;
+    startBtn.style.display = '';
+}
+
+function startGame() {
+    resetGame();
+    messagesContainer.innerHTML = "";
+    startBtn.style.display = 'none';
+    draw();
+    intervalId = setInterval(gameLoop, 120);
+}
+
+const keys = {};
+document.addEventListener('keydown', e => {
+    if (gameOver) return;
+    if (e.key === 'ArrowUp' && direction !== 'down') direction = 'up';
+    if (e.key === 'ArrowDown' && direction !== 'up') direction = 'down';
+    if (e.key === 'ArrowLeft' && direction !== 'right') direction = 'left';
+    if (e.key === 'ArrowRight' && direction !== 'left') direction = 'right';
+});
+
+startBtn.onclick = startGame;
+</script>
+</body>
+</html>
