@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>汽車故障問題小幫手</title>
+    <style>
+        body {
+            font-family: "Microsoft JhengHei", Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+            color: #333;
+        }
+        .container {
+            background-color: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #2c3e50;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .input-section {
+            margin: 20px 0;
+            text-align: center;
+        }
+        button {
+            background-color: #3498db;
+            color: white;
+            border: none;
+            padding: 12px 25px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background-color 0.3s;
+        }
+        button:hover {
+            background-color: #2980b9;
+        }
+        .status {
+            margin-top: 10px;
+            font-size: 1em;
+            color: #888;
+            text-align: center;
+        }
+        .sensor-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 16px;
+            justify-content: center;
+            margin-top: 20px;
+        }
+        .sensor-box {
+            background: #eaf3fa;
+            border-radius: 8px;
+            padding: 18px 24px;
+            min-width: 150px;
+            text-align: center;
+            box-shadow: 0 1px 3px rgba(44,62,80,0.07);
+        }
+        .sensor-title {
+            font-size: 1.2em;
+            font-weight: bold;
+            color: #2c3e50;
+        }
+        .sensor-value {
+            font-size: 1.5em;
+            font-weight: bold;
+            margin-top: 8px;
+            color: #2c3e50;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🚗 汽車故障問題小幫手</h1>
+        <div class="input-section">
+            <button onclick="startRecognition()">🎤 按下開始語音描述故障</button>
+            <div id="voiceText" style="margin-top:15px;color:#888;"></div>
+        </div>
+        <div class="input-section">
+            <button onclick="connectArduinoWS()" id="connectArduinoBtn">🔌 連接 UNO 取得感測數據</button>
+            <div id="connectionStatus" class="status">未連線</div>
+        </div>
+        <div class="sensor-container">
+            <div class="sensor-box">
+                <div class="sensor-title">🌡️ 水溫</div>
+                <div id="sensor-water" class="sensor-value">--</div>
+            </div>
+            <div class="sensor-box">
+                <div class="sensor-title">🌡️ 油溫</div>
+                <div id="sensor-oiltemp" class="sensor-value">--</div>
+            </div>
+            <div class="sensor-box">
+                <div class="sensor-title">🛢️ 機油壓力</div>
+                <div id="sensor-oilpress" class="sensor-value">--</div>
+            </div>
+            <div class="sensor-box">
+                <div class="sensor-title">🔋 電壓</div>
+                <div id="sensor-voltage" class="sensor-value">--</div>
+            </div>
+            <div class="sensor-box">
+                <div class="sensor-title">🛞 輪胎壓力</div>
+                <div id="sensor-tire" class="sensor-value">--</div>
+            </div>
+            <div class="sensor-box">
+                <div class="sensor-title">⛽ 油耗</div>
+                <div id="sensor-fuel" class="sensor-value">--</div>
+            </div>
+        </div>
+        <div id="aiResponse" style="margin-top: 20px; text-align: center;"></div>
+    </div>
+
+    <script>
+        async function startRecognition() {
+            const voiceText = document.getElementById('voiceText');
+            voiceText.textContent = "正在聆聽，請開始描述您的汽車故障問題...";
+
+            try {
+                // 錄音功能需自行實作，這裡假設有 recordAudio()
+                const audioBlob = await recordAudio();
+                const base64Audio = await blobToBase64(audioBlob);
+
+                const response = await fetch('https://speech.googleapis.com/v1/speech:recognize?key=AIzaSyB2i0nrRxRqKALXrxvPigNSSSaLHPxXLt8', {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        config: {
+                            encoding: 'LINEAR16',
+                            sampleRateHertz: 16000,
+                            languageCode: 'zh-TW'
+                        },
+                        audio: {
+                            content: base64Audio
+                        }
+                    }),
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                const result = await response.json();
+                let transcript = '';
+                if (result.results && result.results[0] && result.results[0].alternatives[0]) {
+                    transcript = result.results[0].alternatives[0].transcript;
+                } else {
+                    transcript = '無法辨識語音內容，請再試一次。';
+                }
+                voiceText.textContent = `您說：「${transcript}」`;
+            } catch (error) {
+                console.error("語音辨識錯誤:", error);
+                voiceText.textContent = "語音辨識發生錯誤，請再試一次。";
+            }
+        }
+
+        // 錄音功能（需自行實作，這裡僅為佔位）
+        async function recordAudio() {
+            // 請用 Web Audio API 或 MediaRecorder API 實作錄音
+            alert("請自行實作錄音功能，這裡僅為佔位。");
+            return new Blob();
+        }
+
+        // Blob 轉 Base64
+        async function blobToBase64(blob) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onloadend = () => resolve(reader.result.split(',')[1]);
+                reader.onerror = reject;
+                reader.readAsDataURL(blob);
+            });
+        }
+
+        // 處理汽車故障問題的函數
+        function handleCarProblem(transcript) {
+            const responseDiv = document.getElementById('aiResponse');
+            let response;
+
+            
+
+            // 根據語音輸入匹配故障診斷
+            const matchedFault = faultDiagnosis.find(fault =>
+                fault.keywords.some(keyword => transcript.includes(keyword))
+            );
+
+            if (matchedFault) {
+                response = `
+<b>故障診斷：</b> ${matchedFault.keywords.join(', ')}<br>
+<b>診斷建議：</b> ${matchedFault.advice}<br>
+<b>估價範圍：</b> ${matchedFault.cost}`;
+            } else {
+                response = `
+感謝您的描述！<br>
+<b>建議您：</b>
+<ol>
+<li>詳細記錄故障現象（聲音、氣味、燈號、發生時機）。</li>
+<li>若無法自行排除，請尋求專業技師協助。</li>
+<li>定期保養可預防多數問題。</li>
+</ol>`;
+            }
+
+            responseDiv.innerHTML = `<div class="ai-message">${response}</div>`;
+        }
+
+        // 連接 UNO 並顯示感測數據
+        function connectArduinoWS() {
+            const connectionStatus = document.getElementById('connectionStatus');
+            connectionStatus.textContent = "連線中...";
+
+            // 假設 UNO WebSocket 伺服器在 ws://localhost:8080
+            let ws = new WebSocket('ws://localhost:8080');
+
+            ws.onopen = function() {
+                connectionStatus.textContent = "已連線";
+                console.log("WebSocket 已連線");
+            };
+
+            ws.onerror = function() {
+                connectionStatus.textContent = "連線錯誤";
+                console.log("WebSocket 連線錯誤");
+            };
+
+            ws.onclose = function() {
+                connectionStatus.textContent = "未連線";
+                console.log("WebSocket 已關閉");
+            };
+
+            ws.onmessage = function(event) {
+                // 假設收到的資料格式為：
+                // { water: 90, oiltemp: 85, oilpress: 2.5, voltage: 13.8, tire: 32, fuel: 12.5 }
+                try {
+                    const data = JSON.parse(event.data);
+                    if (typeof data.water !== "undefined") document.getElementById('sensor-water').textContent = data.water + " °C";
+                    if (typeof data.oiltemp !== "undefined") document.getElementById('sensor-oiltemp').textContent = data.oiltemp + " °C";
+                    if (typeof data.oilpress !== "undefined") document.getElementById('sensor-oilpress').textContent = data.oilpress + " bar";
+                    if (typeof data.voltage !== "undefined") document.getElementById('sensor-voltage').textContent = data.voltage + " V";
+                    if (typeof data.tire !== "undefined") document.getElementById('sensor-tire').textContent = data.tire + " psi";
+                    if (typeof data.fuel !== "undefined") document.getElementById('sensor-fuel').textContent = data.fuel + " km/L";
+                } catch (e) {
+                    console.log("資料解析錯誤", e);
+                }
+            };
+        }
+    </script>
+</body>
+</html>
+``` 
